@@ -1,0 +1,48 @@
+#!/bin/bash
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export OMP_NUM_THREADS=1
+CKPT_PATH="/data/q/Qwen2.5-14B-Instruct"
+
+DATA_SET="PDCOT_20241118v3c2s4_scot_train_s0v32o12"
+WUP_STEP=6
+EPOCH=5
+MAX_LEN=8192
+PerGPUBSZ=1
+
+EXP_NAME="SFT-14B-FULL-Z3O"
+echo ${EXP_NAME}
+
+export WANDB_PROJECT=QWEN-A10
+export WANDB_API_KEY=7b50cde7a35e374c0d6cc3c99acb2e4d4607e2f1
+export WANDB_NOTES="Qwen2.5-14B-Instruct,Zero3,Offload"
+
+# --rdzv_conf read_timeout=1800 \
+torchrun \
+    --nproc_per_node auto \
+    src/train.py \
+    --deepspeed examples/deepspeed/ds_z3_offload_config.json \
+    --stage sft \
+    --do_train \
+    --model_name_or_path ${CKPT_PATH} \
+    --dataset ${DATA_SET} \
+    --dataset_dir data \
+    --template qwen \
+    --finetuning_type full \
+    --run_name $EXP_NAME \
+    --output_dir ${EXP_NAME} \
+    --cutoff_len ${MAX_LEN} \
+    --preprocessing_num_workers 16 \
+    --per_device_train_batch_size ${PerGPUBSZ} \
+    --gradient_accumulation_steps 1 \
+    --lr_scheduler_type cosine \
+    --logging_steps 1 \
+    --warmup_steps ${WUP_STEP} \
+    --save_steps 10000 \
+    --learning_rate 1e-5 \
+    --num_train_epochs ${EPOCH} \
+    --ddp_timeout 1800000 \
+    --plot_loss \
+    --flash-attn fa2 \
+    --bf16 \
+    --report_to wandb \
+    --weight_decay 0.01 2>&1 | tee r0.log 
